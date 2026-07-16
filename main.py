@@ -160,20 +160,20 @@ terminal.print(formatted_model)
 
 terminal.move_cursor(0, term_size[1] - 1)
 
-def poster(text = '', delay: float = 0, duration: float = 0, callback = None, animations = []):
+def poster(text = '', delay: float = 0, duration: float = 0, interval = 0.05, sleep = 0.1, callback = None, offset_x = 0, animations = []):
     time.sleep(delay)
 
     for cnt, i in enumerate(text):
-        animation = TerminalAnimation(terminal, random.sample(string.printable, len(string.printable)), interval=0.05)
+        animation = TerminalAnimation(terminal, random.sample(string.printable, len(string.printable)), interval=interval)
         animation.start(
-            (cnt, max(0, terminal.y - 3)),
+            (cnt + offset_x, max(0, terminal.y - 3)),
             duration=duration,
             final_frame=i,
         )
 
         animations.append(animation)
 
-        time.sleep(duration / 4)
+        time.sleep(sleep)
         
     time.sleep(duration)
 
@@ -268,20 +268,63 @@ def read_line(dispatcher, prompt='> '):
             continue
 
         if key == 'enter':
-            def b():
-                def c():
-                    time.sleep(1)
+            frame = [
+    "⠋", "⠙", "⠹", "⠸",
+    "⠼", "⠴", "⠦", "⠧",
+    "⠇", "⠏"
+]
 
-                    a = threading.Thread(target=poster, daemon=True, args=["                ", 0.5, 0.15])
+            animation = TerminalAnimation(terminal, frame, interval=0.15)
+            animation.start(
+                (0, max(0, terminal.y - 3)),
+                duration=500,
+                final_frame=' ',
+            )
+            
+            loading = [
+                "Thinking",
+                "Analyzing",
+                "Planning",
+                "Reading",
+                "Searching",
+                "Inspecting",
+                "Exploring",
+                "Considering",
+                "Reviewing",
+                "Examining",
+                "Checking",
+                "Evaluating",
+                "Calculating",
+                "Comparing",
+                "Refactoring",
+                "Debugging",
+                "Implementing",
+                "Crafting",
+                "Building",
+                "Generating",
+                "Brewing",
+                "Cooking",
+                "Noodling",
+                "Pondering",
+                "Cogitating",
+                "Pontificating",
+                "Percolating",
+                "Meditating",
+                "Contemplating",
+                "Spelunking",
+                "Schlepping",
+                "Envisioning",
+                "Synthesizing",
+            ]
+
+            def worker():
+                for i in loading:
+                    a = threading.Thread(target=lambda: poster(f'{i}...      ', 0.5, 0.15, 0.5, 0.05, None, 2), daemon=True)
                     a.start()
 
-                time.sleep(1)
+                    time.sleep(3)
 
-                a = threading.Thread(target=poster, daemon=True, args=["Almost done...", 0.5, 0.15, c])
-                a.start()
-
-            a = threading.Thread(target=poster, daemon=True, args=["Thinking...", 0.5, 0.15, b])
-            a.start()
+            threading.Thread(target=worker, daemon=True).start()
 
             terminal.move_cursor(0, terminal.y)
             terminal.clear_line()
