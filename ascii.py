@@ -17,6 +17,84 @@ class ControlCode:
     MOVE_CURSOR_TO_SCREEN_START = '\033[H'
     MOVE_CURSOR = lambda row, col: f'\033[{col};{row}H'
 
+class TerminalAnimation:
+    def __init__(self, terminal, frames, interval=0.1):
+        self.terminal = terminal
+        self.frames = tuple(frames)
+        if not self.frames:
+            raise ValueError('frames must not be empty')
+        self.interval = interval
+        self._stop_event = threading.Event()
+        self._thread = None
+        self._position = (0, 0)
+        self._frame_width = max(map(len, self.frames), default=0)
+        self._draw_width = self._frame_width
+        self._duration = None
+        self._final_frame = ''
+
+    def start(self, position, duration=None, final_frame=''):
+        if duration is not None and duration < 0:
+            raise ValueError('duration must be zero or greater')
+
+        self.stop(force=True)
+        self._position = position
+        self._duration = duration
+        self._final_frame = str(final_frame)
+        self._draw_width = max(self._frame_width, len(self._final_frame))
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self, force=False):
+        if self._thread is None:
+            return
+
+        self._stop_event.set()
+        if self._thread is not threading.current_thread():
+            self._thread.join(timeout=self.interval * 2)
+        self._thread = None
+
+        if force:
+            self._draw(' ' * self._draw_width)
+        else:
+            self._draw(self._final_frame, end=True)
+
+    def _draw(self, frame, end = False):
+        x, y = self._position
+        content = frame.ljust(self._draw_width)
+        
+        if end:
+            self.terminal.send_command(
+                f'\033[s\033[{y + 1};{x + 1}H{content}\033[u'
+            )
+        else:
+            self.terminal.send_command(
+                self.terminal.colored_text(f'\033[s\033[{y + 1};{x + 1}H{content}\033[u', (128, 128, 128), None)
+            )
+
+    def _run(self):
+        frame_index = 0
+        deadline = (
+            time.monotonic() + self._duration
+            if self._duration is not None
+            else None
+        )
+
+        while not self._stop_event.is_set():
+            if deadline is not None and time.monotonic() >= deadline:
+                break
+
+            self._draw(self.frames[frame_index])
+            frame_index = (frame_index + 1) % len(self.frames)
+
+            wait_time = self.interval
+            if deadline is not None:
+                wait_time = min(wait_time, max(0, deadline - time.monotonic()))
+            self._stop_event.wait(wait_time)
+
+        if not self._stop_event.is_set():
+            self._draw(self._final_frame, end=True)
+
 class TerminalOutput:
     def __init__(self):
         self.lock = threading.Lock()
