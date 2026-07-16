@@ -1,3 +1,8 @@
+import random
+import string
+import threading
+import time
+
 import ascii
 import util
 import colorama
@@ -10,6 +15,85 @@ SPECIAL_KEYS = {
 }
 
 version = '0.0.1'
+
+
+class TerminalAnimation:
+    def __init__(self, terminal, frames, interval=0.1):
+        self.terminal = terminal
+        self.frames = tuple(frames)
+        if not self.frames:
+            raise ValueError('frames must not be empty')
+        self.interval = interval
+        self._stop_event = threading.Event()
+        self._thread = None
+        self._position = (0, 0)
+        self._frame_width = max(map(len, self.frames), default=0)
+        self._draw_width = self._frame_width
+        self._duration = None
+        self._final_frame = ''
+
+    def start(self, position, duration=None, final_frame=''):
+        if duration is not None and duration < 0:
+            raise ValueError('duration must be zero or greater')
+
+        self.stop(force=True)
+        self._position = position
+        self._duration = duration
+        self._final_frame = str(final_frame)
+        self._draw_width = max(self._frame_width, len(self._final_frame))
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self, force=False):
+        if self._thread is None:
+            return
+
+        self._stop_event.set()
+        if self._thread is not threading.current_thread():
+            self._thread.join(timeout=self.interval * 2)
+        self._thread = None
+
+        if force:
+            self._draw(' ' * self._draw_width)
+        else:
+            self._draw(self._final_frame, end=True)
+
+    def _draw(self, frame, end = False):
+        x, y = self._position
+        content = frame.ljust(self._draw_width)
+        
+        if end:
+            self.terminal.send_command(
+                f'\033[s\033[{y + 1};{x + 1}H{content}\033[u'
+            )
+        else:
+            self.terminal.send_command(
+                self.terminal.colored_text(f'\033[s\033[{y + 1};{x + 1}H{content}\033[u', (128, 128, 128), None)
+            )
+
+    def _run(self):
+        frame_index = 0
+        deadline = (
+            time.monotonic() + self._duration
+            if self._duration is not None
+            else None
+        )
+
+        while not self._stop_event.is_set():
+            if deadline is not None and time.monotonic() >= deadline:
+                break
+
+            self._draw(self.frames[frame_index])
+            frame_index = (frame_index + 1) % len(self.frames)
+
+            wait_time = self.interval
+            if deadline is not None:
+                wait_time = min(wait_time, max(0, deadline - time.monotonic()))
+            self._stop_event.wait(wait_time)
+
+        if not self._stop_event.is_set():
+            self._draw(self._final_frame, end=True)
 
 def shortcut_name(event):
     modifiers = []
@@ -76,6 +160,25 @@ terminal.print(formatted_model)
 
 terminal.move_cursor(0, term_size[1] - 1)
 
+def poster(text = '', delay: float = 0, duration: float = 0, callback = None, animations = []):
+    time.sleep(delay)
+
+    for cnt, i in enumerate(text):
+        animation = TerminalAnimation(terminal, random.sample(string.printable, len(string.printable)), interval=0.05)
+        animation.start(
+            (cnt, max(0, terminal.y - 3)),
+            duration=duration,
+            final_frame=i,
+        )
+
+        animations.append(animation)
+
+        time.sleep(duration / 4)
+        
+    time.sleep(duration)
+
+    if callback:
+        callback()
 
 def prompt_input(dispatcher, prompt):
     value = []
@@ -165,6 +268,21 @@ def read_line(dispatcher, prompt='> '):
             continue
 
         if key == 'enter':
+            def b():
+                def c():
+                    time.sleep(1)
+
+                    a = threading.Thread(target=poster, daemon=True, args=["                ", 0.5, 0.15])
+                    a.start()
+
+                time.sleep(1)
+
+                a = threading.Thread(target=poster, daemon=True, args=["Almost done...", 0.5, 0.15, c])
+                a.start()
+
+            a = threading.Thread(target=poster, daemon=True, args=["Thinking...", 0.5, 0.15, b])
+            a.start()
+
             terminal.move_cursor(0, terminal.y)
             terminal.clear_line()
             return ''.join(value)
@@ -183,9 +301,7 @@ try:
     with ascii.TerminalEventDispatcher(mouse=True) as events:
         while True:
             text = read_line(events)
-            terminal.move_cursor(0, terminal.y - 1)
+            terminal.move_cursor(0, terminal.y)
             terminal.clear_line()
-            terminal.print(f'input: {text}')
 except KeyboardInterrupt:
     terminal.print('\nexit')
-    

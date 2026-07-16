@@ -19,6 +19,7 @@ class ControlCode:
 
 class TerminalOutput:
     def __init__(self):
+        self.lock = threading.Lock()
         self.x = 0
         self.y = 0
 
@@ -89,9 +90,10 @@ class TerminalOutput:
 
     def move_cursor(self, x: int, y: int):
         self.send_command(ControlCode.MOVE_CURSOR(x, y))
-
-        self.x = x
-        self.y = y
+        
+        with self.lock:
+            self.x = x
+            self.y = y
         
     def put_char(self, position, char: str):
         term_w, term_y = self.get_size()
