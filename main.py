@@ -146,6 +146,7 @@ def read_line(dispatcher, prompt='> '):
             if key == 'escape':
                 if not value:
                     terminal.clear_line()
+                    terminal.move_cursor(0, terminal.y)
                     answer = prompt_input(dispatcher, 'Exit Lit? [Y/n] ')
 
                     if answer.lower() == 'y' or not answer:
