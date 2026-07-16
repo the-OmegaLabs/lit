@@ -77,6 +77,38 @@ terminal.print(formatted_model)
 terminal.move_cursor(0, term_size[1] - 1)
 
 
+def prompt_input(dispatcher, prompt):
+    value = []
+    terminal.print(prompt, end='', flush=True)
+
+    while True:
+        event = dispatcher.get_event()
+        if event.type != 'key' or event.action != 'down':
+            continue
+
+        key = event.key or ''
+        normalized_key = key.removeprefix('ctrl_').lower()
+
+        if (event.ctrl or key.startswith('ctrl_')) and normalized_key in ('c', 'd'):
+            raise KeyboardInterrupt
+
+        if key == 'enter':
+            return ''.join(value)
+
+        if key == 'escape':
+            return ''
+
+        if key == 'backspace':
+            if value:
+                value.pop()
+                terminal.send_command('\b \b')
+            continue
+
+        if event.text and event.text.isprintable():
+            value.append(event.text)
+            terminal.print(event.text, end='', flush=True)
+
+
 def read_line(dispatcher, prompt='> '):
     value = []
     terminal.print(prompt, end='', flush=True)
@@ -112,8 +144,17 @@ def read_line(dispatcher, prompt='> '):
                 continue
 
             if key == 'escape':
+                if not value:
+                    terminal.clear_line()
+                    answer = prompt_input(dispatcher, 'Exit Lit? [Y/n] ')
+
+                    if answer.lower() == 'y' or not answer:
+                        exit()
+
                 value.clear()
-                redraw_shortcut(name)
+                terminal.clear_line()
+                terminal.move_cursor(0, terminal.y)
+                terminal.print(prompt, end='', flush=True)
                 continue
 
             redraw_shortcut(name)
