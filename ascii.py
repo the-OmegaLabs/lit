@@ -18,7 +18,7 @@ class ControlCode:
     MOVE_CURSOR = lambda row, col: f'\033[{col};{row}H'
 
 class TerminalAnimation:
-    def __init__(self, terminal, frames, interval=0.1):
+    def __init__(self, terminal, frames, interval=0.1, frame_color: tuple[tuple] | tuple = (255, 255, 255), back_color: tuple[tuple] | tuple = None):
         self.terminal = terminal
         self.frames = tuple(frames)
         if not self.frames:
@@ -31,6 +31,26 @@ class TerminalAnimation:
         self._draw_width = self._frame_width
         self._duration = None
         self._final_frame = ''
+
+        self.keep_color = False
+        self.keep_back = False
+        
+
+        if isinstance(frame_color[0], int):
+            self.keep_color = True
+            self.frame_color = frame_color
+        else:
+            self.frame_color = frame_color
+
+        if back_color:
+            if isinstance(back_color[0], int):
+                self.keep_back = True
+                self.back_color = back_color
+            else:
+                self.back_color = back_color
+        else:
+            self.back_color = None
+
 
     def start(self, position, duration=None, final_frame=''):
         if duration is not None and duration < 0:
@@ -59,7 +79,7 @@ class TerminalAnimation:
         else:
             self._draw(self._final_frame, end=True)
 
-    def _draw(self, frame, end = False):
+    def _draw(self, frame, color: tuple = (255, 255, 255), back: tuple = None, end = False):
         x, y = self._position
         content = frame.ljust(self._draw_width)
         
@@ -69,7 +89,7 @@ class TerminalAnimation:
             )
         else:
             self.terminal.send_command(
-                self.terminal.colored_text(f'\033[s\033[{y + 1};{x + 1}H{content}\033[u', (128, 128, 128), None)
+                self.terminal.colored_text(f'\033[s\033[{y + 1};{x + 1}H{content}\033[u', color, back)
             )
 
     def _run(self):
@@ -84,7 +104,21 @@ class TerminalAnimation:
             if deadline is not None and time.monotonic() >= deadline:
                 break
 
-            self._draw(self.frames[frame_index])
+            frame_color = self.frame_color    
+
+            if not self.keep_color:
+                frame_color = self.frame_color[frame_index]
+
+            if self.back_color:
+                back_color = self.back_color        
+
+                if not self.keep_back:
+                    back_color = self.frame_color[frame_index]
+            else:
+                back_color = None
+
+            self._draw(self.frames[frame_index], color=frame_color, back=back_color)
+
             frame_index = (frame_index + 1) % len(self.frames)
 
             wait_time = self.interval

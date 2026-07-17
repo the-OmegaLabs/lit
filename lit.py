@@ -7,6 +7,8 @@ import ascii
 import util
 import colorama
 
+from colorama import Fore, Back, Style
+
 version = '0.0.1'
 colorama.init()
 
@@ -156,11 +158,7 @@ class Lit:
                 continue
 
             if key == 'enter':
-                frame = [
-        "⠋", "⠙", "⠹", "⠸",
-        "⠼", "⠴", "⠦", "⠧",
-        "⠇", "⠏"
-    ]
+                frame = [self.terminal.colored_text(i, (128, 128, 128), None) for i in ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]]
 
                 animation = ascii.TerminalAnimation(self.terminal, frame, interval=0.15)
                 animation.start(
@@ -178,7 +176,7 @@ class Lit:
 
                 def worker():
                     for i in loading:
-                        a = threading.Thread(target=lambda: self.animate_poster(f'{i}      ', 0.5, 0.15, 0.5, 0.05, None, 2), daemon=True)
+                        a = threading.Thread(target=lambda: self.animate_poster(f'{i}   ', 0.5, 0.1, 0.5, 0.05, None, 2), daemon=True)
                         a.start()
 
                         time.sleep(3)
@@ -203,7 +201,7 @@ class Lit:
         time.sleep(delay)
 
         for cnt, i in enumerate(text):
-            animation = ascii.TerminalAnimation(self.terminal, random.sample(string.printable, len(string.printable)), interval=interval)
+            animation = ascii.TerminalAnimation(self.terminal, random.sample(string.printable, len(string.printable)), interval=interval, frame_color=(128, 128, 128))
             animation.start(
                 (cnt + offset_x, max(0, self.terminal.y - 3)),
                 duration=duration,
@@ -228,7 +226,7 @@ class Lit:
             offset = len(self.model) - 15
 
         self.terminal.print_rect(position=(2, -1), size=(52 + offset, 11)) # outline
-        self.terminal.print_text(position=(5, 1), size=(60, 11), in_rect=True, content=self.logo) # logo
+        self.terminal.print_text(position=(5, 1), size=(60, 11), in_rect=True, content=f'{self.logo}') # logo
         
         app_org_icon = self.terminal.colored_text(f'ø', text_rgb=(128, 128, 128), back_rgb=None)
         app_org = self.terminal.colored_text(f'Omega Labs', text_rgb=(192, 192, 192), back_rgb=None)
