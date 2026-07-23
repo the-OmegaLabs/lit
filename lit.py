@@ -176,7 +176,8 @@ class Lit:
 
                 def worker():
                     for i in loading:
-                        a = threading.Thread(target=lambda: self.animate_poster(f'{i}   ', 0.5, 0.1, 0.5, 0.05, None, 2), daemon=True)
+                        # a = threading.Thread(target=lambda: self.animate_poster(f'{i}   ', 0.5, 0.2, 0.02, 0.1, None, 2), daemon=True) # for cursor-blink
+                        a = threading.Thread(target=lambda: self.animate_poster(f'{i}   ', 0.5, 0.1, 0.5, 0.05, None, 2), daemon=True) # for random character
                         a.start()
 
                         time.sleep(3)
@@ -197,10 +198,14 @@ class Lit:
                 self.terminal.print(event.text, end='', flush=True)
 
 
-    def animate_poster(self, text = '', delay: float = 0, duration: float = 0, interval = 0.05, sleep = 0.1, callback = None, offset_x = 0, animations = []):
+    def animate_poster(self, text = '', delay: float = 0, duration: float = 0.01, interval = 0.05, sleep = 1, callback = None, offset_x = 0, animations = []):
         time.sleep(delay)
 
         for cnt, i in enumerate(text):
+            # cursor-blink style
+            # animation = ascii.TerminalAnimation(self.terminal, [*['█']*2, *['▓']*2, *['▒']*2, *['░']*2], interval=interval)
+
+            # random character style
             animation = ascii.TerminalAnimation(self.terminal, random.sample(string.printable, len(string.printable)), interval=interval, frame_color=(128, 128, 128))
             animation.start(
                 (cnt + offset_x, max(0, self.terminal.y - 3)),

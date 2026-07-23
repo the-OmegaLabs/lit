@@ -6,13 +6,133 @@ import os
 import time
 import queue
 import threading
+import re
 from typing import Literal
 import wcwidth
 from dataclasses import dataclass
 
+
+Color = tuple[int, int, int] | None
+
+
+@dataclass(slots=True)
+class FrameCell:
+    """One terminal cell. Wide characters are present in both occupied cells."""
+
+    char: str = ' '
+    foreground: Color = None
+    background: Color = None
+    continuation: bool = False
+
+    def copy(self):
+        return FrameCell(self.char, self.foreground, self.background, self.continuation)
+
+
+class FrameBuffer:
+    """A readable, writable grid of terminal cells.
+
+    Coordinates are zero based. Rectangle end coordinates are exclusive.
+    ``cells`` (and ``buffer``) can be indexed directly as ``cells[y][x]``.
+    """
+
+    def __init__(self, width: int, height: int, fill: str = ' '):
+        if width < 0 or height < 0:
+            raise ValueError('framebuffer dimensions must not be negative')
+        if wcwidth.wcswidth(fill) != 1:
+            raise ValueError('fill must occupy exactly one terminal cell')
+        self.width = width
+        self.height = height
+        self.cells = [[FrameCell(fill) for _ in range(width)] for _ in range(height)]
+        self.buffer = self.cells
+
+    def __getitem__(self, y):
+        return self.cells[y]
+
+    @staticmethod
+    def _width(char: str) -> int:
+        return max(0, wcwidth.wcwidth(char))
+
+    def _clear_wide_at(self, x: int, y: int):
+        if not (0 <= x < self.width and 0 <= y < self.height):
+            return
+        cell = self.cells[y][x]
+        if cell.continuation and x > 0:
+            self.cells[y][x - 1] = FrameCell()
+        elif self._width(cell.char) == 2 and x + 1 < self.width:
+            right = self.cells[y][x + 1]
+            if right.continuation and right.char == cell.char:
+                self.cells[y][x + 1] = FrameCell()
+        self.cells[y][x] = FrameCell()
+
+    def put(self, x: int, y: int, char: str, foreground: Color = None,
+            background: Color = None) -> int:
+        """Write one character and return the number of occupied cells."""
+        if len(char) != 1:
+            raise ValueError('put expects exactly one character')
+        width = self._width(char)
+        if width == 0:
+            return 0
+        if not (0 <= x < self.width and 0 <= y < self.height):
+            return width
+        if width == 2 and x + 1 >= self.width:
+            return width
+        self._clear_wide_at(x, y)
+        if width == 2:
+            self._clear_wide_at(x + 1, y)
+        self.cells[y][x] = FrameCell(char, foreground, background, False)
+        if width == 2:
+            self.cells[y][x + 1] = FrameCell(char, foreground, background, True)
+        return width
+
+    def write(self, x: int, y: int, content, foreground: Color = None,
+              background: Color = None):
+        """Write text or paste another framebuffer at ``x, y``."""
+        if isinstance(content, FrameBuffer):
+            for source_y, row in enumerate(content.cells):
+                target_y = y + source_y
+                if not 0 <= target_y < self.height:
+                    continue
+                for source_x, cell in enumerate(row):
+                    target_x = x + source_x
+                    if 0 <= target_x < self.width:
+                        self.cells[target_y][target_x] = cell.copy()
+            return
+        start_x = x
+        for char in str(content):
+            if char == '\n':
+                x, y = start_x, y + 1
+                continue
+            x += self.put(x, y, char, foreground, background)
+
+    def get_frame(self, x1: int, y1: int, x2: int, y2: int):
+        """Return an independent, color-preserving copy of a rectangle."""
+        if x2 < x1 or y2 < y1:
+            raise ValueError('rectangle end must not precede its start')
+        left, top = max(0, x1), max(0, y1)
+        right, bottom = min(self.width, x2), min(self.height, y2)
+        result = FrameBuffer(max(0, right - left), max(0, bottom - top))
+        for y, row in enumerate(self.cells[top:bottom]):
+            result.cells[y] = [cell.copy() for cell in row[left:right]]
+        result.buffer = result.cells
+        return result
+
+    def get_text(self) -> str:
+        """Return logical text, suppressing the duplicate half of wide characters."""
+        return '\n'.join(
+            ''.join(cell.char for cell in row if not cell.continuation)
+            for row in self.cells
+        )
+
+    def clear(self):
+        for y in range(self.height):
+            self.cells[y] = [FrameCell() for _ in range(self.width)]
+        self.buffer = self.cells
+
 class ControlCode:
     CLEAR_SCREEN = '\033[2J'
     CLEAR_LINE = '\033[2K'
+    ENTER_ALTERNATE_BUFFER = '\033[?1049h'
+    EXIT_ALTERNATE_BUFFER = '\033[?1049l'
 
     MOVE_CURSOR_TO_SCREEN_START = '\033[H'
     MOVE_CURSOR = lambda row, col: f'\033[{col};{row}H'
@@ -110,10 +230,8 @@ class TerminalAnimation:
                 frame_color = self.frame_color[frame_index]
 
             if self.back_color:
-                back_color = self.back_color        
-
                 if not self.keep_back:
-                    back_color = self.frame_color[frame_index]
+                    back_color = self.back_color[frame_index]
             else:
                 back_color = None
 
@@ -130,10 +248,16 @@ class TerminalAnimation:
             self._draw(self._final_frame, end=True)
 
 class TerminalOutput:
+    _CSI_RE = re.compile(r'\x1b\[([0-9;?]*)([ -/]*)([@-~])')
+
     def __init__(self):
         self.lock = threading.Lock()
         self.x = 0
         self.y = 0
+        self._foreground = None
+        self._background = None
+        width, height = self.get_size()
+        self.framebuffer = FrameBuffer(width, height)
 
     def colored_text(self, text, text_rgb: tuple, back_rgb: tuple):
         result = ""
@@ -163,6 +287,34 @@ class TerminalOutput:
 
         self.x = 0
         self.y = 0
+        self.framebuffer.clear()
+
+    def get_frame(self, x1: int, y1: int, x2: int, y2: int):
+        return self.framebuffer.get_frame(x1, y1, x2, y2)
+
+    def write_frame(self, x: int, y: int, frame: FrameBuffer, draw=True):
+        """Paste a frame into the model and optionally draw its ANSI rendering."""
+        self.framebuffer.write(x, y, frame)
+        if draw:
+            old_x, old_y = self.x, self.y
+            try:
+                for row_number, row in enumerate(frame.cells):
+                    self.move_cursor(x, y + row_number)
+                    last_style = None
+                    run = ''
+                    for cell in row:
+                        if cell.continuation:
+                            continue
+                        style = (cell.foreground, cell.background)
+                        if last_style is not None and style != last_style:
+                            self.send_command(self.colored_text(run, *last_style))
+                            run = ''
+                        run += cell.char
+                        last_style = style
+                    if run:
+                        self.send_command(self.colored_text(run, *last_style))
+            finally:
+                self.move_cursor(old_x, old_y)
 
     def get_size(self):
         term = shutil.get_terminal_size()
@@ -179,6 +331,18 @@ class TerminalOutput:
 
         width, height = self.get_size()
 
+        position = 0
+        for match in self._CSI_RE.finditer(content):
+            self._track_text(content[position:match.start()], width, height)
+            if match.group(3) == 'm':
+                self._apply_sgr(match.group(1))
+            position = match.end()
+        self._track_text(content[position:], width, height)
+
+        if flush:
+            sys.stdout.flush()
+
+    def _track_text(self, content, width, height):
         for ch in content:
             if ch == '\n':
                 self.y += 1
@@ -187,6 +351,11 @@ class TerminalOutput:
                 w = self.get_string_width(ch)
                 if w < 0:
                     w = 0
+
+                if w:
+                    self.framebuffer.put(
+                        self.x, self.y, ch, self._foreground, self._background
+                    )
 
                 self.x += w
 
@@ -197,8 +366,27 @@ class TerminalOutput:
             if self.y >= height: # fix height
                 self.y = height - 1
 
-        if flush:
-            sys.stdout.flush()
+    def _apply_sgr(self, parameters):
+        values = [int(value) if value else 0 for value in parameters.split(';')]
+        index = 0
+        while index < len(values):
+            value = values[index]
+            if value == 0:
+                self._foreground = self._background = None
+            elif value == 39:
+                self._foreground = None
+            elif value == 49:
+                self._background = None
+            elif value in (38, 48) and values[index + 1:index + 2] == [2]:
+                rgb = values[index + 2:index + 5]
+                if len(rgb) == 3:
+                    if all(0 <= channel <= 255 for channel in rgb):
+                        if value == 38:
+                            self._foreground = tuple(rgb)
+                        else:
+                            self._background = tuple(rgb)
+                    index += 4
+            index += 1
 
     def move_cursor(self, x: int, y: int):
         self.send_command(ControlCode.MOVE_CURSOR(x, y))
@@ -707,3 +895,214 @@ class TerminalEventDispatcher:
 
     def __exit__(self, *_):
         self.stop()
+
+
+class Select:
+    """A small framebuffer-aware, keyboard driven selection prompt.
+
+    The prompt is drawn over the current terminal contents.  The covered
+    framebuffer region and cursor position are restored before ``run``
+    returns (or raises), so it can safely be used inside an existing UI.
+    """
+
+    def __init__(self, title, items, terminal=None, *, subtitle=None,
+                 position=None, size=None, dense=False,
+                 selected=0, pointer='>', selected_color=(0, 0, 0),
+                 selected_background=(220, 220, 220),
+                 description_color=(128, 128, 128), background_color=None):
+        self.title = str(title)
+        self.subtitle = None if subtitle is None else str(subtitle)
+        self.items = tuple(self._item_parts(item) for item in items)
+        if not self.items:
+            raise ValueError('items must not be empty')
+        if not 0 <= selected < len(self.items):
+            raise ValueError('selected index is out of range')
+        self.terminal = terminal or TerminalOutput()
+        if position is not None and (len(position) != 2 or min(position) < 0):
+            raise ValueError('position must be a non-negative (x, y) tuple')
+        if size is not None and (len(size) != 2 or min(size) <= 0):
+            raise ValueError('size must be a positive (width, height) tuple')
+        self.position = tuple(position) if position is not None else None
+        self.size = tuple(size) if size is not None else None
+        self.dense = bool(dense)
+        self.selected = selected
+        self.pointer = str(pointer)
+        self.selected_color = selected_color
+        self.selected_background = selected_background
+        self.description_color = description_color
+        self.background_color = background_color
+
+    @staticmethod
+    def _item_parts(item):
+        """Return ``(label, description)`` for strings or two-item tuples."""
+        if isinstance(item, (tuple, list)) and len(item) == 2:
+            return str(item[0]), str(item[1])
+        return str(item), None
+
+    @staticmethod
+    def _fit(text, width):
+        """Clip text without splitting a wide terminal character."""
+        result = []
+        used = 0
+        for char in str(text):
+            char_width = max(0, wcwidth.wcwidth(char))
+            if used + char_width > width:
+                break
+            result.append(char)
+            used += char_width
+        return ''.join(result)
+
+    def _layout(self, origin_x, origin_y):
+        term_width, term_height = self.terminal.get_size()
+        if origin_x >= term_width or origin_y >= term_height:
+            raise ValueError('position must be inside the terminal')
+        # Keep the model in sync if the terminal was resized since creation.
+        framebuffer = self.terminal.framebuffer
+        if (framebuffer.width, framebuffer.height) != (term_width, term_height):
+            resized = FrameBuffer(term_width, term_height)
+            resized.write(0, 0, framebuffer)
+            self.terminal.framebuffer = resized
+
+        available_width = max(1, term_width - origin_x)
+        available_rows = max(1, term_height - origin_y)
+        if self.size is not None:
+            available_width = min(available_width, self.size[0])
+            available_rows = min(available_rows, self.size[1])
+        header_rows = int(bool(self.title)) + int(self.subtitle is not None)
+        if not self.dense and header_rows:
+            header_rows += 1
+        item_height = sum(1 + int(description is not None)
+                          for _, description in self.items)
+        if not self.dense:
+            item_height += max(0, len(self.items) - 1)
+        desired_height = header_rows + item_height
+        height = available_rows if self.size is not None else min(desired_height,
+                                                                  available_rows)
+        # Always reserve at least one row for an option in small boxes.
+        header_rows = min(header_rows, max(0, height - 1))
+        prefix_width = wcwidth.wcswidth(self.pointer) + 1
+        desired_width = max(
+            [wcwidth.wcswidth(self.title)] +
+            [prefix_width + wcwidth.wcswidth(label) for label, _ in self.items] +
+            [prefix_width + wcwidth.wcswidth(description)
+             for _, description in self.items if description]
+        )
+        width = available_width if self.size is not None else min(desired_width, available_width)
+        return max(1, width), height, header_rows
+
+    def _item_height(self, index):
+        return 1 + int(self.items[index][1] is not None)
+
+    def _visible_range(self, rows):
+        """Find a scroll window containing the selected item."""
+        gap = 0 if self.dense else 1
+        start = 0
+        while start <= self.selected:
+            used = 0
+            end = start
+            while end < len(self.items):
+                needed = self._item_height(end) + (gap if end > start else 0)
+                if end > start and used + needed > rows:
+                    break
+                used += needed
+                end += 1
+                if used >= rows:
+                    break
+            if start <= self.selected < max(start + 1, end):
+                return start, max(start + 1, end)
+            start += 1
+        return self.selected, self.selected + 1
+
+    def _draw(self, x, y, width, height, header_rows):
+        frame = FrameBuffer(width, height)
+        if self.background_color is not None:
+            for frame_row in frame.cells:
+                for cell in frame_row:
+                    cell.background = self.background_color
+        row = 0
+        if self.title and row < header_rows:
+            frame.write(0, row, self._fit(self.title, width),
+                        background=self.background_color)
+            row += 1
+        if self.subtitle is not None and row < header_rows:
+            frame.write(0, row, self._fit(self.subtitle, width),
+                        self.description_color, self.background_color)
+            row += 1
+        if not self.dense and row < header_rows:
+            row += 1
+
+        item_rows = max(1, height - row)
+        start, end = self._visible_range(item_rows)
+        prefix_width = wcwidth.wcswidth(self.pointer) + 1
+        for index in range(start, end):
+            if index > start and not self.dense and row < height:
+                row += 1
+            if row >= height:
+                break
+            label, description = self.items[index]
+            active = index == self.selected
+            prefix = f'{self.pointer} ' if active else ' ' * prefix_width
+            line = self._fit(prefix + label, width)
+            foreground = self.selected_color if active else None
+            background = (self.selected_background if active
+                          else self.background_color)
+            # Color the entire selected row, including trailing empty cells.
+            if active:
+                for cell in frame[row]:
+                    cell.foreground = foreground
+                    cell.background = background
+            frame.write(0, row, line, foreground, background)
+            row += 1
+            if description is not None and row < height:
+                description_line = self._fit(' ' * prefix_width + description, width)
+                frame.write(0, row, description_line, self.description_color,
+                            self.background_color)
+                row += 1
+        self.terminal.write_frame(x, y, frame)
+        return max(1, end - start)
+
+    def run(self, dispatcher=None):
+        """Show the prompt and return the selected item; Escape returns None."""
+        cursor_x, cursor_y = self.terminal.x, self.terminal.y
+        x, y = self.position or (cursor_x, cursor_y)
+        width, height, header_rows = self._layout(x, y)
+        saved = self.terminal.get_frame(x, y, x + width, y + height)
+        owns_dispatcher = dispatcher is None
+        if owns_dispatcher:
+            dispatcher = TerminalEventDispatcher(mouse=False)
+
+        try:
+            if owns_dispatcher:
+                dispatcher.start()
+            visible_items = self._draw(x, y, width, height, header_rows)
+            while True:
+                event = dispatcher.get_event()
+                if event is None or event.type != 'key' or event.action != 'down':
+                    continue
+                if event.key == 'up':
+                    self.selected = (self.selected - 1) % len(self.items)
+                elif event.key == 'down':
+                    self.selected = (self.selected + 1) % len(self.items)
+                elif event.key == 'home':
+                    self.selected = 0
+                elif event.key == 'end':
+                    self.selected = len(self.items) - 1
+                elif event.key == 'page_up':
+                    self.selected = max(0, self.selected - visible_items)
+                elif event.key == 'page_down':
+                    self.selected = min(len(self.items) - 1,
+                                        self.selected + visible_items)
+                elif event.key == 'enter':
+                    return self.items[self.selected][0]
+                elif event.key == 'escape':
+                    return None
+                elif event.key == 'ctrl_c' or (event.ctrl and event.key == 'c'):
+                    raise KeyboardInterrupt
+                else:
+                    continue
+                visible_items = self._draw(x, y, width, height, header_rows)
+        finally:
+            if owns_dispatcher:
+                dispatcher.stop()
+            self.terminal.write_frame(x, y, saved)
+            self.terminal.move_cursor(cursor_x, cursor_y)
