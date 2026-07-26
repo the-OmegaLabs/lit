@@ -1,5 +1,5 @@
-![alt text](image.png)
+![alt text](./.static/image.png)
 
 # Lit
 
-Lit is a universal command line agent
+Lit is a universal command line agent.
