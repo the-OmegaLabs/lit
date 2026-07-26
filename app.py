@@ -18,10 +18,10 @@ from pathlib import Path
 
 from openai import OpenAI
 
-import ascii
-from ascii import Style
+from . import ascii
+from .ascii import Style
 
-import config
+from . import config
 
 ###########################
 base_url = config.base_url
