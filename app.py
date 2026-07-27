@@ -1,18 +1,15 @@
 # Lit
+version = '0.2.1'
 
-import contextlib
 import difflib
-import io
 import json
 import math
 import os
-import platform
 import re
 import subprocess
 import sys
 import threading
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 from openai import OpenAI
@@ -1347,9 +1344,9 @@ class TurnView:
         parts.append(('  ' + format_elapsed(elapsed), S_FAINT))
         if self.tool_count:
             if self.tool_count > 1:
-                parts.append((' · %d Tools' % self.tool_count, S_FAINT))
+                parts.append((' · Used %d tools' % self.tool_count, S_FAINT))
             else:
-                parts.append((' · %d Tool' % self.tool_count, S_FAINT))
+                parts.append((' · Used %d tool' % self.tool_count, S_FAINT))
         if elapsed > 2.0:
             parts.append(('   ESC To Interrupt', S_FAINT))
         return parts
@@ -1402,7 +1399,7 @@ class LitApp:
         info = [
             [],
             [('ø ', S_DIM), ('Omega Labs', Style(fg=SILVER, bold=True))],
-            [('Lit. ', S_TEXT), ('(v0.2.0)', S_DIM)],
+            [('Lit. ', S_TEXT), (f'(v{version})', S_DIM)],
             [],
             [('Supercharged by', S_DIM)],
             [(model, S_MUTED)],
@@ -1887,7 +1884,7 @@ class LitApp:
         elif view.error is not None:
             view._separate()
             self.screen.append(
-                view._gut([('● Error ', S_ERR(bold=True)),
+                view._gut([('● Error: ', S_ERR(bold=True)),
                            (_short(str(view.error), max(24, view.width - 8)),
                             S_ERR)]), [])
         elif not view.trailing_blank:
