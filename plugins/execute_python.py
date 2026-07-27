@@ -4,7 +4,9 @@ import io
 
 class Plugin:
     def __init__(self):
-        self.name = 'Execute python code'
+        self.name = "Execute python script"
+        self.version = 'v1.0'
+        self.author = 'Stevesuk0 <stevesukawa@outlook.com>'
 
         self.export_function = {
             'Execute python': self.execute_python_code

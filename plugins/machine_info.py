@@ -6,7 +6,9 @@ import time
 
 class Plugin:
     def __init__(self):
-        self.name = "Execute python code"
+        self.name = "Machine infomation"
+        self.version = 'v1.0'
+        self.author = 'Stevesuk0 <stevesukawa@outlook.com>'
 
         self.export_function = {
             "Get system infomation": self.get_client_system,

@@ -19,6 +19,7 @@ class PluginManager:
         self.plugins = {}
         self.tools = []
         self.functions = {}
+        self.functions_name = {}
 
     def load_plugin(self):
         self.plugins = {}
@@ -39,45 +40,68 @@ class PluginManager:
     def generate_tools(self):
         self.tools = []
         self.functions = {}
+        self.plugin_name = {}
+
+        invaild_plugin = []
 
         for module in self.plugins:
-            plugin = self.plugins.get(module)() # init the plugin
+            try:
+                plugin = self.plugins.get(module)() # init the plugin
+                self.plugin_name[module] = {
+                    'name': plugin.name,
+                    'version': plugin.version,
+                    'author': plugin.author,
+                }
+            except Exception as f:
+                print(f'Error when initialization plugin \"{module}\" ({plugin.name}): ')
+                print(f'  {f}')
+                invaild_plugin.append(module)
 
-            for verb, tool in plugin.export_function.items():
-                sig = inspect.signature(tool)
+                continue
 
-                properties = {}
-                required = []
+            try:
+                for verb, tool in plugin.export_function.items():
+                    sig = inspect.signature(tool)
 
-                for name, param in sig.parameters.items():
-                    if param.kind in (
-                        inspect.Parameter.VAR_POSITIONAL,
-                        inspect.Parameter.VAR_KEYWORD
-                    ):
-                        continue
+                    properties = {}
+                    required = []
 
-                    param_type = map_python_type_to_json(param.annotation)
+                    for name, param in sig.parameters.items():
+                        if param.kind in (
+                            inspect.Parameter.VAR_POSITIONAL,
+                            inspect.Parameter.VAR_KEYWORD
+                        ):
+                            continue
 
-                    properties[name] = {
-                        "type": param_type
-                    }
+                        param_type = map_python_type_to_json(param.annotation)
 
-                    if param.default is inspect.Parameter.empty:
-                        required.append(name)
+                        properties[name] = {
+                            "type": param_type
+                        }
 
-                self.tools.append(
-                    {
-                        "type": "function",
-                        "function": {
-                            "name": f"{module}.{tool.__name__}",
-                            "description": inspect.getdoc(tool) or "",
-                            "parameters": {
-                                "type": "object",
-                                "properties": properties,
-                                "required": required,
+                        if param.default is inspect.Parameter.empty:
+                            required.append(name)
+
+                    self.tools.append(
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": f"{module}.{tool.__name__}",
+                                "description": inspect.getdoc(tool) or "",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": properties,
+                                    "required": required,
+                                },
                             },
-                        },
-                    }
-                )
+                        }
+                    )
 
-                self.functions[f"{module}.{tool.__name__}"] = {'verb': verb, 'function': tool}
+                    self.functions[f"{module}.{tool.__name__}"] = {'verb': verb, 'function': tool}
+
+            except Exception as f:
+                print(f'Error when loading plugin \"{module}\" ({plugin.name}): ')
+                print(f'  {f}')
+
+        for i in invaild_plugin:
+            self.plugins.pop(i)

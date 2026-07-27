@@ -1628,11 +1628,10 @@ class LitApp:
             self.screen.append([("List of installed plugins:", S_TEXT)])
 
             for i in plugin.plugins:
-                self.screen.append([(f"  {i}:", S_TEXT)])
+                self.screen.append([(f"  {plugin.plugin_name[i]['name']} {plugin.plugin_name[i]['version']} ({i}):", S_TEXT)])
                 for j in plugin.functions:
                     if i in j:
-                        print(f'  {j}')
-
+                        self.screen.append([(f"    {plugin.functions[j]['verb']}: ", S_OK), (j, S_DIM)])
                 self.screen.append([])
 
         elif name == '/clear':
