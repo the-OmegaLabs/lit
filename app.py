@@ -1622,7 +1622,7 @@ class LitApp:
         if name == '/model':
             self.screen.append(
                 [('  Model  ', S_DIM), (model, S_TEXT)],
-                [('  Endpoint  ', S_DIM), ('ark.cn-beijing.volces.com', S_MUTED)],
+                [('  Endpoint  ', S_DIM), (config.base_url, S_MUTED)],
                 [])
         elif name == '/plugin':
             self.screen.append([("List of installed plugins:", S_TEXT)])
@@ -1752,7 +1752,7 @@ class LitApp:
                     model=model_id,
                     messages=self.messages,
                     tools=tools,
-                    stream=True
+                    stream=True,
                 )
                 tool_calls = {}
                 interrupted = False
