@@ -7,9 +7,13 @@ requires-python = ">=3.14"
 dependencies = [
     "colorama>=0.4.6",
     "inquirerpy>=0.3.4",
+    "markdownify>=1.2.3",
     "openai>=2.46.0",
     "questionary>=2.1.1",
+    "readability-lxml>=0.8.4.1",
+    "requests>=2.34.2",
     "rich>=15.0.0",
+    "trafilatura>=2.1.0",
     "wcwidth>=0.8.2",
     "windows-curses>=2.4.2",
 ]
