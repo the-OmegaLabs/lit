@@ -1,18 +1,82 @@
 import importlib
 import inspect
 import os
+from typing import Dict, List, Literal, Union, get_args, get_origin
 
-def map_python_type_to_json(annotation):
-    mapping = {
-        str: "string",
-        int: "integer",
-        float: "number",
-        bool: "boolean",
-        list: "array",
-        dict: "object",
-    }
+def map_python_type_to_json(tp):
+    """
+    Python typing -> JSON Schema
+    """
 
-    return mapping.get(annotation, "string")
+    if tp is inspect.Parameter.empty:
+        return "string"
+
+    origin = get_origin(tp)
+    args = get_args(tp)
+
+    if tp in (str,):
+        return "string"
+
+    if tp in (int,):
+        return "integer"
+
+    if tp in (float,):
+        return "number"
+
+    if tp in (bool,):
+        return "boolean"
+
+    if tp in (list, List):
+        return {
+            "type": "array",
+            "items": {"type": "string"}
+        }
+
+    if tp in (dict, Dict):
+        return "object"
+
+    if origin is Literal:
+        values = list(args)
+
+        if all(isinstance(v, str) for v in values):
+            return {
+                "type": "string",
+                "enum": values
+            }
+
+        if all(isinstance(v, int) for v in values):
+            return {
+                "type": "integer",
+                "enum": values
+            }
+
+    if origin in (list, List):
+        item_type = args[0] if args else str
+
+        return {
+            "type": "array",
+            "items": map_python_type_to_json(item_type)
+        }
+
+    if origin in (dict, Dict):
+        return {
+            "type": "object"
+        }
+
+    if origin is Union:
+        non_none = [
+            x for x in args
+            if x is not type(None)
+        ]
+
+        if len(non_none) == 1:
+            schema = map_python_type_to_json(non_none[0])
+            schema["nullable"] = True
+            return schema
+
+
+    # fallback
+    return "string"
 
 class PluginManager:
     def __init__(self):
