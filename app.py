@@ -972,7 +972,7 @@ class ToolCard:
             strings = ''
 
             for k, v in self.args.items():
-                strings += f'{k}: "{v}",'
+                strings += f'{k}: "{v}", '
             
             return _short(strings)
         
