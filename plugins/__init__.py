@@ -1,6 +1,7 @@
 import importlib
 import inspect
 import os
+import sys
 from typing import Dict, List, Literal, Union, get_args, get_origin
 
 def map_python_type_to_json(tp):
@@ -92,7 +93,7 @@ class PluginManager:
             if file.startswith("_") or not file.endswith(".py"):
                 continue
 
-            module_name = f"plugins.{file[:-3]}"
+            module_name = f"{__package__}.{file[:-3]}"
 
             module = importlib.import_module(module_name)
             importlib.reload(module)

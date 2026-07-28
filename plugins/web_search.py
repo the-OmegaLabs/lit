@@ -6,7 +6,7 @@ from markdownify import markdownify
 import trafilatura
 
 from tavily import TavilyClient
-client = TavilyClient(api_key='your_api_key')
+client = TavilyClient(api_key="your-tavily-api-key")
 
 class Plugin:
     def __init__(self):
@@ -23,7 +23,7 @@ class Plugin:
         html = requests.get(
             url,
             headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+                "User-Agent": f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 LitSearch/{self.version}"
             }
         ).text
 

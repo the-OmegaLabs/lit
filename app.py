@@ -1,5 +1,5 @@
 # Lit
-version = '0.3.0'
+version = '0.3.2'
 
 import difflib
 import json
@@ -45,6 +45,10 @@ model_id = config.model_id
 client = OpenAI(
     api_key=api_key,
     base_url=base_url,
+    default_headers={
+        "User-Agent": f"Lit/{version}",
+        "X-Client-Version": f"{version}"
+    }
 )
 
 # Four constraints explain all the numbers below. They are not aesthetic
