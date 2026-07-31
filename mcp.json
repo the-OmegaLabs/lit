@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "example": {
+      "enabled": false,
+      "url": "https://mcp.example.com/mcp",
+      "transport": "streamable_http",
+      "headers": {
+        "Authorization": "Bearer ${MCP_API_KEY}"
+      },
+      "timeout": 30
+    }
+  }
+}

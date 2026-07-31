@@ -3,3 +3,5 @@
 test.*
 
 config.py
+tests/test_mcp_server.py
+

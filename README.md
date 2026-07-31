@@ -90,6 +90,32 @@ uv run -m lit
 ```
 or open the **lit** folder and run the `app.py` directly.
 
+### Remote MCP Servers
+
+Lit loads remote MCP tools through `plugins/mcp_server.py`. Add each server to
+the root-level `mcp.json`, then restart Lit. The plugin discovers the remote
+tools during startup and exposes them to the agent just like built-in plugins.
+
+```json
+{
+  "mcpServers": {
+    "company-tools": {
+      "url": "https://mcp.example.com/mcp",
+      "transport": "streamable_http",
+      "headers": {
+        "Authorization": "Bearer ${MCP_API_KEY}"
+      },
+      "timeout": 30
+    }
+  }
+}
+```
+
+`streamable_http` is the default transport; legacy `sse` servers are also
+supported. Set `enabled` to `false` to keep a server in the file without
+connecting to it. Values written as `${VARIABLE}` are read from the process
+environment, keeping credentials out of `mcp.json`.
+
 ---
 
 ## 🤝 Contributing
