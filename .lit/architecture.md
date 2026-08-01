@@ -36,7 +36,15 @@ plugin extensions.
 - `_decode_source` / `_write_source` preserves the original newline style
   (LF / CRLF / CR) and BOM, preventing spurious diffs on Windows.
 
-### 5. Read safety limits
+### 5. CRLF in live rendering
+
+- `Screen.append()` and `Screen.paint()` use `\r\n` for line separators, not
+  bare `\n`. In raw terminal mode on Linux/macOS, `\n` only moves the cursor
+  down without returning to column 0, causing the live region to render
+  misaligned. `\r\n` ensures the cursor returns to the left margin on every
+  platform.
+
+### 6. Read safety limits
 
 - `MAX_READ_LINES = 2000` — prevents large file reads from flooding context.
 - `write_file` refuses to overwrite an existing file when new content is less

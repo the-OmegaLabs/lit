@@ -2176,7 +2176,7 @@ class Screen:
             width, _ = self.size()
             sequence = '\033[?2026h' + self._erase_live()
             for line in lines:
-                sequence += '\033[2K' + self._render_line(line, width) + '\n'
+                sequence += '\033[2K' + self._render_line(line, width) + '\r\n'
             self._write(sequence + '\033[?2026l')
             self._flush()
         self.paint()
@@ -2193,7 +2193,7 @@ class Screen:
             width, _ = self.size()
             sequence = '\033[?2026h' + self._erase_live()
             for line in final_lines:
-                sequence += '\033[2K' + self._render_line(line, width) + '\n'
+                sequence += '\033[2K' + self._render_line(line, width) + '\r\n'
             self._write(sequence + '\033[?2026l')
             self._flush()
 
@@ -2212,7 +2212,7 @@ class Screen:
             sequence = '\033[?2026h'
             sequence += '\033[%dF' % self._painted if self._painted else '\r'
             for line in lines:
-                sequence += '\033[2K' + self._render_line(line, width) + '\n'
+                sequence += '\033[2K' + self._render_line(line, width) + '\r\n'
             sequence += '\033[J\033[?2026l'
             self._painted = len(lines)
             self._write(sequence)
