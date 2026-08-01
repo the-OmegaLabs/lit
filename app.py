@@ -1,5 +1,5 @@
 # Lit
-version = '0.4.0'
+version = '0.4.1'
 
 import difflib
 import json
@@ -1787,6 +1787,13 @@ class LitApp:
                             bool(args.get("replace_all", False)))
                     except Exception as e:
                         result = {"success": False, "error": str(e)}
+            elif name == 'read_file':
+                try:
+                    result = {"success": True,
+                              **read_file(args["path"], args.get("start_line"),
+                                          args.get("end_line"))}
+                except Exception as e:
+                    result = {"success": False, "error": str(e)}
             elif name in plugin.functions:
                 func = plugin.functions.get(name)['function']
 
