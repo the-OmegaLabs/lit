@@ -5,7 +5,7 @@
 Lit's plugin system allows extending the agent's toolset with custom Python
 modules. Plugins are loaded at startup and their functions are automatically
 exposed as OpenAI-compatible tool definitions, merged into the agent's tool
-list alongside the built-in tools (`shell_command`, `read_file`, `write_file`,
+list alongside the built-in tools (`execute_command`, `read_file`, `write_file`,
 `edit_file`).
 
 ## Directory Structure
