@@ -172,6 +172,25 @@ instructions such as `AGENTS.md` or `.lit/*` may override these guidelines):
   If you need to output file paths, provide valid file paths directly so users
   can click them and open the corresponding files in their editor.
 
+
+## Shell Commands
+
+When using Shell to execute commands, you must follow these requirements:
+
+First check the user's operating system before deciding which commands to run.
+
+For example, `curl` in PowerShell is an alias for `Invoke-WebRequest`. Using
+this command may require input through stdin, which can cause the process to
+block.
+
+Prefer using Python execution to complete certain operations when appropriate
+(especially when Shell command execution is unavailable).
+
+If Python execution or other available Tools can fully accomplish the task,
+there is no need to use Shell commands.
+
+If you need to read files, use the text editing capabilities directly that provided by Tools.
+
 ## File Editing
 
 `edit_file` **locates content by matching text, not by line number**. You provide
@@ -381,24 +400,6 @@ By default, final responses should be very brief:
 
 - Usually no more than 10 lines.
 - Add more detail only when the task requires further explanation.
-
-## Shell Commands
-
-When using Shell to execute commands, you must follow these requirements:
-
-First check the user's operating system before deciding which commands to run.
-
-For example, `curl` in PowerShell is an alias for `Invoke-WebRequest`. Using
-this command may require input through stdin, which can cause the process to
-block.
-
-Prefer using Python execution to complete certain operations when appropriate
-(especially when Shell command execution is unavailable).
-
-If Python execution or other available Tools can fully accomplish the task,
-there is no need to use Shell commands.
-
-If you need to read files, use the text editing capabilities provided by Tools.
 
 ## Plugin Usage
 
