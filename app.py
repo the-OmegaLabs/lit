@@ -206,44 +206,84 @@ def decode_output(data: bytes) -> str:
     return data.decode("utf-8", errors="replace")
 
 
-def run_powershell(command: str, cancel: threading.Event | None = None):
+def execute_command(
+    shell: str,
+    command: str,
+    timeout: int = 30,
+    cancel: threading.Event | None = None,
+):
     try:
-        process = subprocess.Popen(
-            [
-                "powershell",
-                "-NoProfile",
-                "-Command",
-                command,
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
+        if shell == "powershell":
+            process = subprocess.Popen(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    command,
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+        elif shell == "sh":
+            process = subprocess.Popen(
+                [
+                    "/bin/sh",
+                    "-c",
+                    command,
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+        else:
+            return {
+                "stdout": "",
+                "stderr": f"unsupported shell: {shell}",
+                "exit_code": -1,
+            }
+
+        elapsed = 0
 
         while True:
             try:
                 stdout, stderr = process.communicate(timeout=0.15)
                 break
+
             except subprocess.TimeoutExpired:
+                elapsed += 0.15
+
                 if cancel is not None and cancel.is_set():
                     process.kill()
                     stdout, stderr = process.communicate()
+
                     return {
                         "stdout": decode_output(stdout),
                         "stderr": "interrupted by user",
-                        "returncode": -1,
+                        "exit_code": -1,
+                    }
+
+                if elapsed >= timeout:
+                    process.kill()
+                    stdout, stderr = process.communicate()
+
+                    return {
+                        "stdout": decode_output(stdout),
+                        "stderr": f"timeout after {timeout}s",
+                        "exit_code": -1,
                     }
 
         return {
             "stdout": decode_output(stdout),
             "stderr": decode_output(stderr),
-            "returncode": process.returncode,
+            "exit_code": process.returncode,
         }
 
     except Exception as e:
         return {
             "stdout": "",
             "stderr": str(e),
-            "returncode": -1,
+            "exit_code": -1,
         }
 
 
@@ -255,17 +295,31 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "shell_command",
-            "description": "Runs a PowerShell command.",
+            "name": "execute_command",
+            "description": "Execute a system command using the specified shell and return its output.",
             "parameters": {
-                "type": "object",
-                "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": "PowerShell command to execute."
-                    }
+            "type": "object",
+            "properties": {
+                "shell": {
+                    "type": "string",
+                    "enum": ["sh", "powershell"],
+                    "description": "Shell interpreter. Use sh for Linux/macOS and powershell for Windows."
                 },
-                "required": ["command"]
+                "command": {
+                    "type": "string",
+                    "description": "The command to execute."
+                },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Maximum execution time in seconds.",
+                    "default": 30
+                }
+            },
+            "required": [
+                "shell",
+                "command"
+            ],
+            "additionalProperties": False
             }
         }
     },
@@ -1012,16 +1066,21 @@ class ToolCard:
             for line in rows[:cap]:
                 preview.append((line, style))
 
-        if self.name == 'shell_command':
-            ok = result.get('returncode') == 0
+        if self.name == 'execute_command':
+            ok = result.get('exit_code', result.get('returncode')) == 0
+
             out = (result.get('stdout') or '').strip()
             err = (result.get('stderr') or '').strip()
+
             if out:
                 add(out)
+
             if err:
                 add(err, soft_err, cap=2)
+
             if not out and not err:
                 preview.append(('(No output)', S_FAINT(italic=True)))
+
         elif self.name == 'read_file':
             ok = bool(result.get('success'))
             if ok:
@@ -1056,8 +1115,6 @@ class ToolCard:
                     bits.append('Created %d line' % result.get('total_lines', 0))
                 if result.get('replacements', 1) > 1:
                     bits.append('%d places' % result['replacements'])
-                # 命中方式暴露出来：indent 意味着模型的缩进本来是错的，工具替它
-                # 兜住了。看得见，才知道该不该去改提示词。
                 if result.get('matched') in ('trailing', 'indent'):
                     bits.append('Fuzzy matching (%s)' % result['matched'])
                 if bits:
@@ -1694,15 +1751,14 @@ class LitApp:
         card = ToolCard(name, args)
         view.begin_tool(card)
         try:
-            if name == 'shell_command':
-                result = run_powershell(args["command"], self.cancel)
-            elif name == 'read_file':
-                try:
-                    result = {"success": True,
-                              **read_file(args["path"], args.get("start_line"),
-                                          args.get("end_line"))}
-                except Exception as e:
-                    result = {"success": False, "error": str(e)}
+            if name == 'execute_command':
+                result = execute_command(
+                    shell=args.get("shell", "powershell"),
+                    command=args["command"],
+                    timeout=args.get("timeout", 30),
+                    cancel=self.cancel,
+                )
+
             elif name == 'write_file':
                 try:
                     result = write_file(args["path"], args["content"])
