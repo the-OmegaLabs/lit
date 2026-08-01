@@ -10,6 +10,9 @@ model = 'example-model - Example Provider'
 # Model identifier id. Specifies which AI model in requests.
 model_id = 'example-model'
 
+# Maximum context length supported by the model, measured in tokens.
+context_limit = 1048576
+
 # ==========================
 # UI Configuration
 # ==========================

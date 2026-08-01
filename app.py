@@ -1,5 +1,5 @@
 # Lit
-version = '0.4.1'
+version = '0.5.0'
 
 import difflib
 import json
@@ -178,6 +178,16 @@ MD_THEME = ascii.MarkdownTheme(
     ),
     table_border=Style(fg=(116, 199, 236)),    # Sapphire
 )
+
+def format_number(num):
+    if num >= 1_000_000_000:
+        return f"{num / 1_000_000_000:.1f}b"
+    elif num >= 1_000_000:
+        return f"{num / 1_000_000:.1f}m"
+    elif num >= 1_000:
+        return f"{num / 1_000:.1f}k"
+    else:
+        return str(num)
 
 logo = r""" __       __    ______
 /\ \     /\ \  /\__  _\
@@ -918,6 +928,7 @@ COMMANDS = [
     ('/help', 'Show help and shortcuts'),
     ('/clear', 'Clear screen and start a new session'),
     ('/model', 'View current model'),
+    ('/usage', 'View token usage and context limit'),
     ('/plugin', 'Show all loaded plugins'),
     ('/exit', 'Exit Lit'),
 ]
@@ -1213,8 +1224,8 @@ class TurnView:
             self.header_done = True
         head = [('◈ ', S_AGENT(bold=True)), ('Lit', Style(fg=TEXT, bold=True))]
 
-        if self.app.turns <= 1:
-            head.append(('  ' + model, S_FAINT))
+        # if self.app.turns <= 1:
+        head.append(('  ' + model, S_FAINT))
         self.app.screen.append(head)
 
     def _commit(self, *lines):
@@ -1424,6 +1435,16 @@ class LitApp:
         self.notice_until = 0.0
         self.turns = 0
 
+        self.b = ''
+
+        self.input_tokens = 0
+        self.output_tokens = 0
+
+        self.total_tokens = 0
+        self.cached_tokens = 0
+
+        self.token_limit = config.context_limit
+
     # ------------------------------------------------------------- helpers
     # def save_chat(self):
     #     try:
@@ -1586,6 +1607,7 @@ class LitApp:
         # looking for entry points).
         # Keep the line itself always present to avoid layout shifts caused by
         # appearing/disappearing — jitter is more annoying than the hint itself.
+
         now = time.monotonic()
         if self.notice and now < self.notice_until:
             left = [('  ✱ ', S_WARN), (self.notice, S_WARN)]
@@ -1595,7 +1617,29 @@ class LitApp:
                     ('Ctrl+C', S_MUTED), (' Exit', S_FAINT)]
         else:
             left = [('  ', None)]
-        right = [(model + ' ', S_FAINT)]
+
+        if self.turns == 0:
+            right = [(model + ' ', S_FAINT)]
+        else:
+            used_percent = "∞"
+            tokens = format_number(self.total_tokens)
+            used_color = S_OK
+
+            if self.token_limit:
+                percent = (self.total_tokens / self.token_limit) * 100
+                used_percent = f"{percent:.1f}%"
+                tokens = f"{tokens} / {format_number(self.token_limit)}"
+
+                if percent >= 90:
+                    used_color = S_ERR
+                elif percent >= 70:
+                    used_color = S_WARN
+
+            right = [
+                (f"{used_percent} ", used_color),
+                (tokens + " ", S_FAINT),
+            ]
+
         lines.append(hint_bar(left, right, width))
         return lines
 
@@ -1684,7 +1728,38 @@ class LitApp:
             self.screen.append(
                 [('  Model  ', S_DIM), (model, S_TEXT)],
                 [('  Endpoint  ', S_DIM), (config.base_url, S_MUTED)],
+                [],
+                [('  View token usage, cache stats and context limit by ', S_DIM), ('/usage', S_TEXT)],
                 [])
+        elif name == '/usage':
+            cached = ''
+            
+            input_tokens = format_number(self.input_tokens)
+            output_tokens = format_number(self.output_tokens)
+            if self.cached_tokens and self.total_tokens:
+                cached_percent = round((self.cached_tokens / self.total_tokens) * 100, 1)
+                cached = f', {cached_percent}% Cached'
+
+            self.screen.append(
+                [('  Usage ', S_DIM),
+                    ("[↑ ", S_MUTED),
+                    (input_tokens, S_TEXT),
+                    (", ↓ ", S_MUTED),
+                    (output_tokens, S_TEXT),
+                    ("", S_MUTED),
+                    (cached, S_GOLD),
+                    ("].", S_FAINT)],
+                [],
+                [('    Total         ', S_DIM), (f"{self.total_tokens} tokens. ({format_number(self.total_tokens)})", S_TEXT)],
+                [('    Total cached  ', S_DIM), (f"{self.cached_tokens} tokens. ({format_number(self.cached_tokens)})", S_GOLD)],
+                [],
+                [('    Total input   ', S_DIM), (f"{self.input_tokens} tokens.", S_TEXT)],
+                [('    Total output  ', S_DIM), (f"{self.output_tokens} tokens.", S_TEXT)],
+                [],
+                [('    The model has a configured context limit:', S_DIM)],
+                [(f'        {self.token_limit} ({format_number(self.token_limit)}) ', S_ERR), ('tokens.', S_TEXT)],
+                [],
+            )
         elif name == '/plugin':
             self.screen.append([("List of installed plugins:", S_TEXT)])
 
@@ -1819,10 +1894,30 @@ class LitApp:
                     messages=self.messages,
                     tools=tools,
                     stream=True,
+                    stream_options={"include_usage": True}
                 )
                 tool_calls = {}
                 interrupted = False
                 for chunk in response:
+                    if hasattr(chunk, 'usage'):
+                        if chunk.usage:
+                            self.input_tokens = chunk.usage.prompt_tokens
+                            self.output_tokens = chunk.usage.completion_tokens
+
+                            if chunk.usage.prompt_tokens_details:
+                                self.cached_tokens = (
+                                    chunk.usage.prompt_tokens_details.cached_tokens or 0
+                                )
+                            
+                            if chunk.usage.completion_tokens_details:
+                                self.output_tokens += (
+                                    chunk.usage.completion_tokens_details.reasoning_tokens or 0
+                                )
+
+                            self.total_tokens = self.input_tokens + self.output_tokens
+
+                    self.b += str(chunk) + '\n'
+
                     if self.cancel.is_set():
                         interrupted = True
                         try:
@@ -1907,6 +2002,9 @@ class LitApp:
             view.error = error
         finally:
             view.done = True
+
+            with open('test.b', 'w', encoding='utf-8') as f:
+                f.write(self.b)
 
     def run_turn(self, events, text):
         self.messages.append({"role": "user", "content": text})
