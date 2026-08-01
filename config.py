@@ -11,7 +11,7 @@ model = 'example-model - Example Provider'
 model_id = 'example-model'
 
 # Maximum context length supported by the model, measured in tokens.
-context_limit = 1048576
+context_limit = 0
 
 # ==========================
 # UI Configuration
