@@ -5,10 +5,10 @@ base_url = 'https://api.example.com/api/v1'
 api_key = 'your-api-key-here'
 
 # Model displaying name. Specifies which AI model in system prompt and UI.
-model = 'gpt-5.6-sol - Example Provider'
+model = 'example-model - Example Provider'
 
 # Model identifier id. Specifies which AI model in requests.
-model_id = 'gpt-5.6-sol'
+model_id = 'example-model'
 
 # ==========================
 # UI Configuration
