@@ -1,5 +1,5 @@
 # Lit
-version = '0.5.0'
+version = '0.5.1'
 
 import difflib
 import json
@@ -1623,7 +1623,7 @@ class LitApp:
         else:
             used_percent = "∞"
             tokens = format_number(self.total_tokens)
-            used_color = S_OK
+            used_color = S_TEXT
 
             if self.token_limit:
                 percent = (self.total_tokens / self.token_limit) * 100
