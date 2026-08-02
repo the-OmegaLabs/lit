@@ -1775,6 +1775,11 @@ class LitApp:
             self.screen.clear_screen()
             self.screen.append(*self.splash_lines(phase=None))
             self.screen.append([('  ✦ Context cleared', S_OK)], [])
+
+            self.input_tokens = 0
+            self.output_tokens = 0
+            self.total_tokens = 0
+            self.cached_tokens = 0
         elif name == '/help':
             shortcuts = [
                 ('ESC', 'Interrupt / Clear input'),
