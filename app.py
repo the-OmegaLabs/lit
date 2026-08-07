@@ -1426,7 +1426,7 @@ class TurnView:
 
 class LitApp:
     def __init__(self):
-        self.screen = ascii.Screen(fps=24)
+        self.screen = ascii.Screen(fps=60)
         self.field = ascii.TextField()
         self.messages = [{"role": "system", "content": system}]
         self.cancel = threading.Event()
