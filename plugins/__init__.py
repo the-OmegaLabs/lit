@@ -166,7 +166,7 @@ class PluginManager:
                         }
                     )
 
-                    self.functions[f"{module}.{tool.__name__}"] = {'verb': verb, 'function': tool}
+                    self.functions[f"{module}.{tool.__name__}".replace('.', '_')] = {'verb': verb, 'function': tool}
 
             except Exception as f:
                 print(f'Error when loading plugin \"{module}\" ({plugin.name}): ')
