@@ -1435,7 +1435,6 @@ class LitApp:
         self.notice_until = 0.0
         self.turns = 0
 
-        self.b = ''
 
         self.input_tokens = 0
         self.output_tokens = 0
@@ -1921,7 +1920,6 @@ class LitApp:
 
                             self.total_tokens = self.input_tokens + self.output_tokens
 
-                    self.b += str(chunk) + '\n'
 
                     if self.cancel.is_set():
                         interrupted = True
@@ -2007,9 +2005,6 @@ class LitApp:
             view.error = error
         finally:
             view.done = True
-
-            with open('test.b', 'w', encoding='utf-8') as f:
-                f.write(self.b)
 
     def run_turn(self, events, text):
         self.messages.append({"role": "user", "content": text})
