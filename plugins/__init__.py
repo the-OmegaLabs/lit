@@ -137,12 +137,16 @@ class PluginManager:
                             inspect.Parameter.VAR_KEYWORD
                         ):
                             continue
-
+                        
                         param_type = map_python_type_to_json(param.annotation)
 
-                        properties[name] = {
-                            "type": param_type
-                        }
+                        # fix: Invalid schema for function
+                        if isinstance(param_type, dict):
+                            properties[name] = param_type
+                        else:
+                            properties[name] = {
+                                "type": param_type
+                            }
 
                         if param.default is inspect.Parameter.empty:
                             required.append(name)
@@ -151,7 +155,7 @@ class PluginManager:
                         {
                             "type": "function",
                             "function": {
-                                "name": f"{module}.{tool.__name__}",
+                                "name": f"{module}_{tool.__name__}".replace('.', '_'),
                                 "description": inspect.getdoc(tool) or "",
                                 "parameters": {
                                     "type": "object",
