@@ -84,7 +84,6 @@ class PluginManager:
         self.plugins = {}
         self.tools = []
         self.functions = {}
-        self.functions_name = {}
 
     def load_plugin(self):
         self.plugins = {}
